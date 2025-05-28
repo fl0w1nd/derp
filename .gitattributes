@@ -1,2 +1,4 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+# Detect .DS_Store files and ignore them
+.DS_Store export-ignore
