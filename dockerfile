@@ -1,5 +1,4 @@
 # --- Builder Stage ---
-# 使用更具体的 Go 版本以保证构建环境的稳定性
 FROM golang:alpine AS builder
 
 # 设置工作目录
@@ -43,8 +42,12 @@ RUN apk update && \
 # 创建证书存放目录
 RUN mkdir -p /app/certs
 
-# 从 builder 阶段复制编译好的 derper 二进制文件和 Go 的二进制目录
+# 从 builder 阶段复制编译好的 derper 二进制文件
 COPY --from=builder /go/bin/derper /app/derper
+
+# 复制 entrypoint 脚本并赋予执行权限
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 # 设置默认环境变量 (用户可以在 docker run 或 docker-compose 中覆盖)
 ENV DERP_DOMAIN="example.com" \
@@ -61,13 +64,5 @@ EXPOSE 443/tcp
 EXPOSE 80/tcp
 EXPOSE 3478/udp
 
-# 容器启动命令
-CMD ["/app/derper", \
-     "--hostname=${DERP_DOMAIN}", \
-     "--certmode=${DERP_CERT_MODE}", \
-     "--certdir=${DERP_CERT_DIR}", \
-     "--a=${DERP_ADDR}", \
-     "--stun=${DERP_STUN}", \
-     "--stun-port=${DERP_STUN_PORT}", \
-     "--http-port=${DERP_HTTP_PORT}", \
-     "--verify-clients=${DERP_VERIFY_CLIENTS}"]
+# 设置容器的入口点，它会执行脚本，脚本会处理环境变量并启动 derper
+ENTRYPOINT ["/app/entrypoint.sh"]
