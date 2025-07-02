@@ -8,7 +8,7 @@ docker-compose 部署
 ```yaml
 services:
   derper:
-    image: fl0w1nd/derper:main
+    image: fl0w1nd/derper:latest
     container_name: derper
     environment:
       - TZ=Asia/Shanghai
