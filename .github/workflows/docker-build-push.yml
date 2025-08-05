@@ -1,10 +1,17 @@
 name: Build and Push DERP Docker Image
 
+# 版本号
+run-name: Build and Push DERP Image ${{ github.event.inputs.version || '(auto-latest)' }}
+
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Image version (e.g., 1.56.0). Leave blank to use the latest from Go Proxy.'
+        required: false
+        default: ''
 
 env:
-  # Docker Hub 仓库地址和名称
   REGISTRY: docker.io
   IMAGE_NAME: fl0w1nd/derper
 
@@ -16,24 +23,26 @@ jobs:
       packages: write
 
     steps:
-      - name:  checkout repository
+      - name: checkout repository
         uses: actions/checkout@v4
 
-      # 从 Go Proxy API 获取最新版本号
-      - name: 🔍 Fetch latest version from Go Proxy
+      - name: 🔍 Determine Image Version
         id: get_version
         run: |
-          # 从 API 获取 JSON 数据，并使用 jq 解析出版本号（去掉 'v' 前缀）
-          LATEST_VERSION=$(curl -s "https://proxy.golang.org/tailscale.com/@latest" | jq -r .Version | sed 's/^v//')
-          
-          # 验证是否成功获取版本号
-          if [ -z "$LATEST_VERSION" ]; then
-            echo "❌ Error: Failed to fetch latest version from Go Proxy."
-            exit 1
+          USER_VERSION="${{ github.event.inputs.version }}"
+          if [ -n "$USER_VERSION" ]; then
+            echo "✅ Using user-provided version: ${USER_VERSION}"
+            echo "version=${USER_VERSION}" >> $GITHUB_OUTPUT
+          else
+            echo "ℹ️ No version provided, fetching latest from Go Proxy..."
+            LATEST_VERSION=$(curl -s "https://proxy.golang.org/tailscale.com/@latest" | jq -r .Version | sed 's/^v//')
+            if [ -z "$LATEST_VERSION" ]; then
+              echo "❌ Error: Failed to fetch latest version from Go Proxy."
+              exit 1
+            fi
+            echo "✅ Fetched latest version: ${LATEST_VERSION}"
+            echo "version=${LATEST_VERSION}" >> $GITHUB_OUTPUT
           fi
-          
-          echo "✅ Fetched latest version: ${LATEST_VERSION}"
-          echo "version=${LATEST_VERSION}" >> $GITHUB_OUTPUT
 
       - name: ⚙️ Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -57,11 +66,9 @@ jobs:
           push: true
           build-args: |
             DERP_VERSION=v${{ steps.get_version.outputs.version }}
-          # 使用获取到的版本号和 'latest' 作为镜像标签
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.get_version.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          # 启用 GitHub Actions 缓存
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
