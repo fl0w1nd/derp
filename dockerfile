@@ -50,6 +50,7 @@ ENV DERP_DOMAIN="example.com" \
     DERP_STUN="true" \
     DERP_STUN_PORT="3478" \
     DERP_HTTP_PORT="80" \
+    DERP_DERP="true" \
     DERP_VERIFY_CLIENTS="false"
 
 # 暴露端口 (仅为文档目的)
