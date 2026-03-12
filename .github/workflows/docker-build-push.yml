@@ -17,16 +17,13 @@ env:
   IMAGE_NAME: fl0w1nd/derper
 
 jobs:
-  build-and-push:
+  check:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      packages: write
-
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      prev_tag: ${{ steps.prev_version.outputs.tag }}
+      should_build: ${{ steps.check_version.outputs.should_build }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
       - name: 🔍 Determine target version
         id: get_version
         run: |
@@ -54,14 +51,14 @@ jobs:
             "https://api.github.com/repos/${{ github.repository }}/releases/tags/v${VERSION}")
           if [ "$HTTP_CODE" = "200" ]; then
             echo "⏭️ Version v${VERSION} already exists, skipping build"
-            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "should_build=false" >> $GITHUB_OUTPUT
           else
             echo "🆕 Version v${VERSION} is new, proceeding with build"
-            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "should_build=true" >> $GITHUB_OUTPUT
           fi
 
       - name: 🔍 Get previous version for changelog
-        if: steps.check_version.outputs.exists == 'false'
+        if: steps.check_version.outputs.should_build == 'true'
         id: prev_version
         run: |
           PREV_TAG=$(curl -s \
@@ -75,87 +72,142 @@ jobs:
             echo "tag=${PREV_TAG}" >> $GITHUB_OUTPUT
           fi
 
-      - name: ⚙️ Set up QEMU
-        if: steps.check_version.outputs.exists == 'false'
-        uses: docker/setup-qemu-action@v3
+  build:
+    needs: check
+    if: needs.check.outputs.should_build == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare
+        run: |
+          platform=${{ matrix.platform }}
+          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
 
       - name: ⚙️ Set up Docker Buildx
-        if: steps.check_version.outputs.exists == 'false'
         uses: docker/setup-buildx-action@v3
 
       - name: 🔑 Log in to Docker Hub
-        if: steps.check_version.outputs.exists == 'false'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: 🚀 Build and push Docker image
-        if: steps.check_version.outputs.exists == 'false'
-        id: build_and_push
-        uses: docker/build-push-action@v5
+      - name: 🚀 Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
+          platforms: ${{ matrix.platform }}
           build-args: |
-            DERP_VERSION=v${{ steps.get_version.outputs.version }}
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.get_version.outputs.version }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            DERP_VERSION=v${{ needs.check.outputs.version }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
+          cache-to: type=gha,scope=${{ env.PLATFORM_PAIR }},mode=max
+
+      - name: Export digest
+        run: |
+          mkdir -p ${{ runner.temp }}/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ env.PLATFORM_PAIR }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: 🔑 Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: ⚙️ Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🚀 Create manifest list and push
+        run: |
+          VERSION="${{ needs.check.outputs.version }}"
+          docker buildx imagetools create \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION} \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' \
+              $(ls ${{ runner.temp }}/digests/))
+
+      - name: 📝 Inspect image
+        run: |
+          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.check.outputs.version }}
 
       - name: 📝 Generate release body
-        if: steps.check_version.outputs.exists == 'false'
         id: release_body
         run: |
-          VERSION="${{ steps.get_version.outputs.version }}"
-          PREV_TAG="${{ steps.prev_version.outputs.tag }}"
-          BODY="## DERP Server v${VERSION}
+          VERSION="${{ needs.check.outputs.version }}"
+          PREV_TAG="${{ needs.check.outputs.prev_tag }}"
 
-          **Docker image**
-
-          \`\`\`bash
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}
-          \`\`\`
-
-          ### derper 源码变更
-
-          "
-          if [ -n "$PREV_TAG" ]; then
-            BODY="${BODY}- [完整变更](https://github.com/tailscale/tailscale/compare/${PREV_TAG}...v${VERSION})
-          - [derper 变更](https://github.com/tailscale/tailscale/compare/${PREV_TAG}...v${VERSION} \"筛选 cmd/derper 路径查看 derper 相关改动\")
-          - [derper 提交历史](https://github.com/tailscale/tailscale/commits/v${VERSION}/cmd/derper)"
-          else
-            BODY="${BODY}- [derper 提交历史](https://github.com/tailscale/tailscale/commits/v${VERSION}/cmd/derper)"
-          fi
-
-          # 写入多行内容到 GITHUB_OUTPUT
           {
             echo "body<<BODY_EOF"
-            echo "$BODY"
+            echo "## DERP Server v${VERSION}"
+            echo ""
+            echo "**Docker image**"
+            echo ""
+            echo "\`\`\`bash"
+            echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}"
+            echo "\`\`\`"
+            echo ""
+            echo "### derper 源码变更"
+            echo ""
+            if [ -n "$PREV_TAG" ]; then
+              echo "- [完整变更](https://github.com/tailscale/tailscale/compare/${PREV_TAG}...v${VERSION})"
+              echo "- [derper 提交历史](https://github.com/tailscale/tailscale/commits/v${VERSION}/cmd/derper)"
+            else
+              echo "- [derper 提交历史](https://github.com/tailscale/tailscale/commits/v${VERSION}/cmd/derper)"
+            fi
             echo "BODY_EOF"
           } >> $GITHUB_OUTPUT
 
       - name: 📦 Create GitHub Release
-        if: steps.check_version.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.get_version.outputs.version }}
-          name: v${{ steps.get_version.outputs.version }}
+          tag_name: v${{ needs.check.outputs.version }}
+          name: v${{ needs.check.outputs.version }}
           body: ${{ steps.release_body.outputs.body }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 📝 Print summary
         run: |
-          VERSION="${{ steps.get_version.outputs.version }}"
-          if [ "${{ steps.check_version.outputs.exists }}" = "true" ]; then
-            echo "⏭️ v${VERSION} already up to date, nothing to do"
-          else
-            echo "🎉 Successfully built and released v${VERSION}"
-            echo "   - Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}"
-            echo "   - Release: https://github.com/${{ github.repository }}/releases/tag/v${VERSION}"
-          fi
+          VERSION="${{ needs.check.outputs.version }}"
+          echo "🎉 Successfully built and released v${VERSION}"
+          echo "   - Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}"
+          echo "   - Release: https://github.com/${{ github.repository }}/releases/tag/v${VERSION}"
