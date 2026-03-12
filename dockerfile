@@ -8,23 +8,16 @@ WORKDIR /app
 # 如果不传入，默认为 'latest'
 ARG DERP_VERSION=latest
 
-# 使用 Docker 内置的平台变量来确保正确的架构构建
-ARG TARGETPLATFORM
-ARG TARGETOS
-ARG TARGETARCH
-
 # 设置 Go 环境变量，例如 GOPROXY（如果需要）
 # RUN go env -w GOPROXY=https://goproxy.cn,direct
 
 # 在构建前打印版本信息，方便调试
-RUN echo "🚀 Building derper from tailscale.com@${DERP_VERSION} for ${TARGETPLATFORM}..."
+RUN echo "🚀 Building derper from tailscale.com@${DERP_VERSION}..."
 
 # 构建静态链接的 derper 二进制文件
 # CGO_ENABLED=0 确保静态链接，不依赖外部 C 库
-# 使用 TARGETOS 和 TARGETARCH 来构建正确的架构
 # 注意：我们安装的是 tailscale.com 主模块下的 cmd/derper
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-    go install tailscale.com/cmd/derper@${DERP_VERSION}
+RUN CGO_ENABLED=0 go install tailscale.com/cmd/derper@${DERP_VERSION}
 
 # --- Final Stage ---
 FROM alpine:latest

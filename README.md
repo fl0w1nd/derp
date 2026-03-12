@@ -13,9 +13,10 @@ services:
     environment:
       - TZ=Asia/Shanghai
       - DERP_CERT_MODE=manual
-      - DERP_DOMAIN=your hostname
+      - DERP_DOMAIN=your-domain.com
       - DERP_ADDR=:12345
       - DERP_HTTP_PORT=-1
+      - DERP_STUN=true
       - DERP_STUN_PORT=3478
       - DERP_VERIFY_CLIENTS=true
       - DERP_CERT_DIR=/app/certs
@@ -47,7 +48,7 @@ services:
 			"900": {
 				"RegionID":   900,
 				"RegionCode": "CN",
-				"RegionName": "custum",
+				"RegionName": "custom",
 				"Nodes": [
 					{
 						"Name":             "derper",
