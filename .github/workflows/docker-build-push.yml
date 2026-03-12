@@ -4,6 +4,8 @@ name: Build and Push DERP Docker Image
 run-name: Build and Push DERP Image ${{ github.event.inputs.version || '(auto-latest)' }}
 
 on:
+  schedule:
+    - cron: '0 0 * * 1'
   workflow_dispatch:
     inputs:
       version:
