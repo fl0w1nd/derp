@@ -102,6 +102,44 @@ All parameters are configured via environment variables. They are divided into *
 
 > **Note**: Mesh networking is mainly for multi-node deployments; not needed for single-node setups.
 
+### ACME / Certificates (Optional)
+
+| Env Var | Description | Default |
+|---------|-------------|---------|
+| `DERP_ACME_EMAIL` | ACME account contact email. Required when `DERP_CERT_MODE=gcp`, optional for `letsencrypt`. | Unset |
+| `DERP_ACME_EAB_KID` | ACME External Account Binding (EAB) Key ID. Required when `DERP_CERT_MODE=gcp`. | Unset |
+| `DERP_ACME_EAB_KEY` | ACME EAB HMAC key, base64-encoded. Required when `DERP_CERT_MODE=gcp`. | Unset |
+| `DERP_ACME_IP_CERTS` | Issue LetsEncrypt certs for the server's IP addresses (short-lived ~6-day ACME profile, works for IPv4/IPv6). Requires `DERP_CERT_MODE=letsencrypt` and port 80 reachable for the HTTP-01 challenge. | Unset (derper default `false`) |
+
+### Bootstrap DNS (Optional)
+
+| Env Var | Description | Default |
+|---------|-------------|---------|
+| `DERP_BOOTSTRAP_DNS_NAMES` | Comma-separated hostnames to make available at the `/bootstrap-dns` endpoint. | Unset |
+| `DERP_UNPUBLISHED_BOOTSTRAP_DNS_NAMES` | Comma-separated hostnames available at `/bootstrap-dns` but not published in the list. An entry may contain a slash followed by a DNS record name polled for a TXT record with a `0`–`100` rollout percentage. | Unset |
+
+### Advanced Rate Limiting (Optional)
+
+| Env Var | Description | Default |
+|---------|-------------|---------|
+| `DERP_RATE_CONFIG` | Path to a JSON rate limit config file. Experimental and subject to change; reloaded on `SIGHUP`. | Unset |
+
+### Secrets / SETEC (Optional)
+
+| Env Var | Description | Default |
+|---------|-------------|---------|
+| `DERP_SECRETS_URL` | SETEC server URL for retrieving the mesh key. Mainly used by Tailscale's internal infrastructure. | Unset |
+| `DERP_SECRETS_PATH_PREFIX` | SETEC path prefix for the `meshkey` secret. | derper default `prod/derp` |
+| `DERP_SECRETS_CACHE_DIR` | Directory to cache SETEC secrets in. Required when `DERP_SECRETS_URL` is set. | derper default |
+
+### Development & Experimental (Optional)
+
+| Env Var | Description | Default |
+|---------|-------------|---------|
+| `DERP_DEV` | Run in localhost development mode (overrides `DERP_ADDR`). Not for production. | Unset (derper default `false`) |
+| `DERP_PRINT_VERSION` | Print derper version and exit. Maps to the `--version` flag; setting this makes the container exit immediately after printing (it will then restart due to `restart: always`). Named `DERP_PRINT_VERSION` to avoid confusion with the Dockerfile build arg `DERP_VERSION`. | Unset (derper default `false`) |
+| `DERP_ACE` | Enable embedded ACE server. Experimental and in-development upstream, not yet documented. | Unset (derper default `false`) |
+
 ## ACL Configuration
 
 Add custom DERP nodes in Tailscale admin console ACL:

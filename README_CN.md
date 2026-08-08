@@ -102,6 +102,44 @@ services:
 
 > **提示**：Mesh 组网功能主要用于多 DERP 节点场景，单节点无需配置。
 
+### ACME / 证书（可选）
+
+| 环境变量 | 说明 | 默认值 |
+|---------|------|--------|
+| `DERP_ACME_EMAIL` | ACME 账户联系邮箱。`DERP_CERT_MODE=gcp` 时必填，`letsencrypt` 时可选。 | 不设置 |
+| `DERP_ACME_EAB_KID` | ACME External Account Binding (EAB) Key ID。`DERP_CERT_MODE=gcp` 时必填。 | 不设置 |
+| `DERP_ACME_EAB_KEY` | ACME EAB HMAC key（base64 编码）。`DERP_CERT_MODE=gcp` 时必填。 | 不设置 |
+| `DERP_ACME_IP_CERTS` | 为服务器 IP 地址签发 LetsEncrypt 证书（短期约 6 天的 ACME 证书，支持 IPv4/IPv6）。需 `DERP_CERT_MODE=letsencrypt` 且 80 端口可被 ACME 服务器访问以完成 HTTP-01 校验。 | 不设置（derper 默认 `false`） |
+
+### Bootstrap DNS（可选）
+
+| 环境变量 | 说明 | 默认值 |
+|---------|------|--------|
+| `DERP_BOOTSTRAP_DNS_NAMES` | 逗号分隔的主机名，在 `/bootstrap-dns` 端点提供。 | 不设置 |
+| `DERP_UNPUBLISHED_BOOTSTRAP_DNS_NAMES` | 逗号分隔的主机名，在 `/bootstrap-dns` 提供但不发布在列表里。条目可含 `/` 加 DNS 记录名，通过其 TXT 记录的 `0`–`100` 值控制灰度发布百分比。 | 不设置 |
+
+### 高级速率限制（可选）
+
+| 环境变量 | 说明 | 默认值 |
+|---------|------|--------|
+| `DERP_RATE_CONFIG` | JSON 速率限制配置文件路径。实验性功能，可能变更；收到 `SIGHUP` 时重载。 | 不设置 |
+
+### Secrets / SETEC（可选）
+
+| 环境变量 | 说明 | 默认值 |
+|---------|------|--------|
+| `DERP_SECRETS_URL` | SETEC secrets 服务器 URL，用于获取 mesh key。主要用于 Tailscale 内部基础设施。 | 不设置 |
+| `DERP_SECRETS_PATH_PREFIX` | SETEC 路径前缀，用于定位 `meshkey` secret。 | derper 默认 `prod/derp` |
+| `DERP_SECRETS_CACHE_DIR` | SETEC secrets 缓存目录。`DERP_SECRETS_URL` 设置时必填。 | derper 默认值 |
+
+### 开发与实验性（可选）
+
+| 环境变量 | 说明 | 默认值 |
+|---------|------|--------|
+| `DERP_DEV` | localhost 开发模式，会覆盖 `DERP_ADDR`。不适用于生产环境。 | 不设置（derper 默认 `false`） |
+| `DERP_PRINT_VERSION` | 打印 derper 版本后退出，对应 `--version` flag。设置后容器打印版本即退出（因 `restart: always` 会重启）。命名为 `DERP_PRINT_VERSION` 以避免与 Dockerfile 构建参数 `DERP_VERSION` 混淆。 | 不设置（derper 默认 `false`） |
+| `DERP_ACE` | 启用嵌入式 ACE server。上游标注为实验性、开发中，尚未文档化。 | 不设置（derper 默认 `false`） |
+
 ## ACL 配置
 
 在 Tailscale 管理后台的 ACL 中添加自定义 DERP 节点：
