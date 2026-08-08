@@ -29,6 +29,19 @@ services:
       - /var/run/tailscale:/var/run/tailscale
       - ./certs:/app/certs
     network_mode: host
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - |
+          if test -S /var/run/tailscale/tailscaled.sock; then
+            exit 0
+          fi
+          kill -TERM 1
+          exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 1
+      start_period: 10s
     restart: always
 ```
 
@@ -122,3 +135,4 @@ services:
 - 如果使用自签名证书，需要将 `DERP_CERT_MODE` 设置为 `manual`。
 - `DERP_DOMAIN` 设置为 IP 地址可跳过 SNI 验证。
 - 开启 `DERP_VERIFY_CLIENTS` 需要在宿主机安装 Tailscale 客户端并挂载 `/var/run/tailscale`。
+- compose 中的 `healthcheck` 会监测 tailscaled socket。当宿主机 Tailscale 更新后，绑定挂载的 `/var/run/tailscale/tailscaled.sock` 可能在容器中丢失；healthcheck 检测到此情况后会重启容器以重新建立挂载。

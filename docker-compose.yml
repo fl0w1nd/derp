@@ -16,4 +16,17 @@ services:
       - /var/run/tailscale:/var/run/tailscale
       - ./certs:/app/certs
     network_mode: host
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - |
+          if test -S /var/run/tailscale/tailscaled.sock; then
+            exit 0
+          fi
+          kill -TERM 1
+          exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 1
+      start_period: 10s
     restart: always

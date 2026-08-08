@@ -29,6 +29,19 @@ services:
       - /var/run/tailscale:/var/run/tailscale
       - ./certs:/app/certs
     network_mode: host
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - |
+          if test -S /var/run/tailscale/tailscaled.sock; then
+            exit 0
+          fi
+          kill -TERM 1
+          exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 1
+      start_period: 10s
     restart: always
 ```
 
@@ -122,3 +135,4 @@ Add custom DERP nodes in Tailscale admin console ACL:
 - If using self-signed certificates, set `DERP_CERT_MODE` to `manual`.
 - Setting `DERP_DOMAIN` to an IP address skips SNI verification.
 - Enabling `DERP_VERIFY_CLIENTS` requires Tailscale installed on the host and mounting `/var/run/tailscale`.
+- The `healthcheck` monitors the tailscaled socket. When the host's Tailscale is updated, the bind-mounted `/var/run/tailscale/tailscaled.sock` can disappear from the container; the healthcheck detects this and restarts the container so the mount is re-established.
