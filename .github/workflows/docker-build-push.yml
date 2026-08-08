@@ -11,6 +11,11 @@ on:
         description: 'Image version (e.g., 1.56.0). Leave blank to use the latest from Go Proxy.'
         required: false
         default: ''
+      force:
+        description: 'Force rebuild even if the version release already exists (overwrites Docker Hub tags and updates the release).'
+        type: boolean
+        required: false
+        default: false
 
 env:
   REGISTRY: docker.io
@@ -45,6 +50,12 @@ jobs:
       - name: 🔍 Check if version already exists
         id: check_version
         run: |
+          FORCE="${{ github.event.inputs.force }}"
+          if [ "$FORCE" = "true" ]; then
+            echo "🔨 Force rebuild requested, proceeding with build"
+            echo "should_build=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
           VERSION="${{ steps.get_version.outputs.version }}"
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
